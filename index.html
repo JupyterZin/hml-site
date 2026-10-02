@@ -1,0 +1,978 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HML — Hybrid Memory Ledger</title>
+<style>
+  :root {
+    --bg: #fffaf3;
+    --bg2: #fdf1e3;
+    --card: #ffffff;
+    --line: #f0dfc8;
+    --text: #26221c;
+    --dim: #6f6252;
+    --orange: #ea580c;
+    --orange-soft: #f97316;
+    --orange-deep: #c2410c;
+    --warm: #b45309;
+    --bad: #dc2626;
+    --ok: #15803d;
+    --ink: #1c1917;
+    --mono: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow-x: hidden;
+  }
+  code, .mono { font-family: var(--mono); font-size: .88em; background: var(--bg2); padding: .05em .3em; border-radius: 5px; }
+
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+    display: flex; flex-wrap: wrap; row-gap: .15rem; column-gap: 1.2rem; align-items: center;
+    padding: .7rem 1.4rem;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+    font-size: .85rem;
+  }
+  nav .brand { font-family: var(--mono); font-weight: 700; color: var(--orange); margin-right: auto; background: none; padding: 0; }
+  nav a { color: var(--dim); text-decoration: none; }
+  nav a:hover { color: var(--orange); }
+
+  section {
+    min-height: 100vh;
+    padding: 6.5rem clamp(1.2rem, 6vw, 6rem) 4rem;
+    display: flex; flex-direction: column; justify-content: center;
+    position: relative;
+  }
+  section:nth-of-type(even) { background: var(--bg2); }
+  h2 { font-size: clamp(1.6rem, 3.4vw, 2.6rem); margin-bottom: .6rem; letter-spacing: -.02em; }
+  h2 .accent { color: var(--orange); }
+  .lede { color: var(--dim); max-width: 62ch; margin-bottom: 2.2rem; font-size: 1.05rem; }
+
+  .reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  .reveal.d1 { transition-delay: .12s; } .reveal.d2 { transition-delay: .24s; } .reveal.d3 { transition-delay: .36s; }
+
+  /* ---------- hero ---------- */
+  #hero { align-items: center; text-align: center; }
+  #net { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .5; }
+  #hero > .inner { position: relative; z-index: 2; max-width: 800px; }
+  #hero h1 { font-size: clamp(2.2rem, 5.5vw, 4.2rem); letter-spacing: -.03em; line-height: 1.08; }
+  #hero h1 .ice { color: var(--orange); }
+  #hero p { color: var(--dim); margin: 1.2rem auto 0; max-width: 56ch; font-size: 1.1rem; }
+  #phaseBadge {
+    display: inline-block; margin-top: 1.6rem; padding: .35rem .9rem; border-radius: 999px;
+    font-family: var(--mono); font-size: .8rem; border: 1px solid var(--line); background: #fff;
+    transition: all .6s ease;
+  }
+  #phaseBadge.training { color: var(--orange); border-color: var(--orange); box-shadow: 0 0 18px #f9731655; }
+  #phaseBadge.frozen { color: var(--dim); border-color: #b8ada0; box-shadow: 0 0 18px #b8ada055; }
+  .scrollCue { position: absolute; bottom: 2rem; left: 50%; transform: translateX(-50%); color: var(--dim); font-size: .8rem; animation: bob 2s infinite ease-in-out; }
+  @keyframes bob { 50% { transform: translate(-50%, 8px); } }
+
+  /* ---------- cards ---------- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.1rem; max-width: 1100px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 1.4rem 1.3rem; transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+  }
+  .card:hover { transform: translateY(-4px); border-color: var(--orange-soft); box-shadow: 0 10px 26px #f9731622; }
+  .card h3 { font-size: 1.05rem; margin-bottom: .5rem; }
+  .card p { color: var(--dim); font-size: .92rem; }
+  .card .glyph { font-size: 1.5rem; margin-bottom: .6rem; display: block; }
+  .card li { color: var(--dim); font-size: .92rem; margin-left: 1.1rem; margin-bottom: .35rem; }
+  .card.cost { border-top: 4px solid var(--bad); }
+  .card.save { border-top: 4px solid var(--ok); }
+  .card.cost h3 { color: var(--bad); } .card.save h3 { color: var(--ok); }
+
+  /* ---------- mascots ---------- */
+  .stage { display: flex; align-items: flex-end; justify-content: center; gap: clamp(1rem, 6vw, 4rem); max-width: 1000px; margin: 0 auto; position: relative; min-height: 320px; cursor: pointer; }
+  .actor { display: flex; flex-direction: column; align-items: center; gap: .8rem; position: relative; }
+  .mascot { width: clamp(110px, 16vw, 170px); animation: float 3.4s ease-in-out infinite; }
+  .mascot.pix { shape-rendering: crispEdges; filter: drop-shadow(0 12px 16px #e0765a45); }
+  .mascot.blob { filter: drop-shadow(0 0 22px #3b9bf055) drop-shadow(0 12px 16px #1d6fe030); }
+  .actor:last-child .mascot { animation-delay: 1.1s; }
+  @keyframes float { 50% { transform: translateY(-12px); } }
+  .peye { animation: blinkPix 4.4s infinite steps(1); }
+  @keyframes blinkPix { 0%, 93%, 100% { opacity: 1; } 95% { opacity: 0; } }
+  .gloss-eye { transform-box: fill-box; transform-origin: center; animation: blink 4.4s infinite 1.8s; }
+  @keyframes blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.06); } }
+  .nameTag { font-family: var(--mono); font-size: .8rem; color: var(--dim); }
+  .bubble {
+    position: absolute; bottom: 105%; min-width: 190px; max-width: 240px;
+    background: #fff; border: 2px solid var(--orange-soft); border-radius: 14px;
+    padding: .6rem .85rem; font-size: .85rem; color: var(--text); z-index: 6;
+    opacity: 0; transform: translateY(8px); transition: opacity .35s ease, transform .35s ease;
+    box-shadow: 0 8px 20px #ea580c1e; pointer-events: none;
+  }
+  .bubble.show { opacity: 1; transform: none; }
+  .bubble::after {
+    content: ""; position: absolute; top: 100%; left: 36px;
+    border: 9px solid transparent; border-top-color: var(--orange-soft);
+  }
+  .ledgerMid { display: flex; flex-direction: column; align-items: center; gap: .6rem; position: relative; padding-bottom: 2.2rem; }
+  .ledgerCard {
+    background: var(--ink); color: #ffd9b8; border-radius: 14px; padding: .9rem 1.1rem;
+    font-family: var(--mono); font-size: .72rem; line-height: 1.7; box-shadow: 0 14px 30px #1c191733;
+    animation: float 3.4s ease-in-out infinite .5s;
+    transition: box-shadow .4s ease; min-width: 240px;
+  }
+  .ledgerCard.glow { box-shadow: 0 0 0 3px var(--orange-soft), 0 14px 34px #f9731644; }
+  .ledgerCard .h { color: var(--orange-soft); }
+  .ledgerCard .newEvent { display: none; color: #86efac; margin-top: .3rem; }
+  .ledgerCard .newEvent.show { display: block; animation: pop .45s ease; }
+  /* the flying packet: label rides ABOVE the dot, both fade smoothly at each end */
+  .flyer { position: absolute; top: 118px; left: 12%; z-index: 5; opacity: 0; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .flyer .tag {
+    font-family: var(--mono); font-size: .68rem; color: var(--orange-deep);
+    background: #fff; border: 1px solid var(--orange-soft); border-radius: 6px;
+    padding: .12rem .45rem; white-space: nowrap; box-shadow: 0 4px 10px #ea580c22;
+  }
+  .flyer .dot { width: 18px; height: 18px; border-radius: 6px; background: var(--orange-soft); box-shadow: 0 0 18px var(--orange-soft); }
+  .flyer.flyIn { animation: flyIn 1.7s ease-in-out forwards; }
+  .flyer.flyOut { animation: flyOut 1.7s ease-in-out forwards; }
+  @keyframes flyIn {
+    0% { left: 12%; opacity: 0; transform: translateY(6px); }
+    15% { opacity: 1; transform: none; }
+    80% { opacity: 1; }
+    100% { left: 43%; opacity: 0; transform: translateY(-6px); }
+  }
+  @keyframes flyOut {
+    0% { left: 55%; opacity: 0; transform: translateY(6px); }
+    15% { opacity: 1; transform: none; }
+    80% { opacity: 1; }
+    100% { left: 84%; opacity: 0; transform: translateY(-6px); }
+  }
+  .stageCaption { text-align: center; margin-top: 1.4rem; font-family: var(--mono); font-size: .85rem; color: var(--dim); }
+  .stageCaption b { color: var(--orange); }
+
+  /* ---------- hash chain builder ---------- */
+  .chainWrap { max-width: 860px; }
+  .chain { display: flex; flex-direction: column; gap: 0; }
+  .block {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1rem 1.2rem; position: relative; cursor: pointer;
+    transition: border-color .3s, box-shadow .3s;
+    animation: pop .45s ease;
+  }
+  @keyframes pop { from { opacity: 0; transform: scale(.92) translateY(14px); } }
+  .block:hover { border-color: var(--orange-soft); }
+  .block .row { display: flex; gap: 1rem; flex-wrap: wrap; align-items: baseline; }
+  .block .hash { font-family: var(--mono); color: var(--orange-deep); font-size: .82rem; }
+  .block .prev { font-family: var(--mono); color: var(--dim); font-size: .78rem; }
+  .block .author { font-family: var(--mono); font-size: .78rem; padding: .1rem .55rem; border-radius: 999px; border: 1px solid var(--orange-soft); color: var(--orange); }
+  .block .summary { color: var(--dim); font-size: .9rem; margin-top: .35rem; }
+  .block.tampered { border-color: var(--bad); box-shadow: 0 0 22px #dc262630; }
+  .block.tampered .hash { color: var(--bad); text-decoration: line-through; }
+  .block .flag { display: none; margin-top: .5rem; font-family: var(--mono); font-size: .75rem; color: var(--bad); }
+  .block.tampered .flag { display: block; }
+  .link {
+    width: 2px; height: 34px; margin-left: 2.2rem;
+    background: linear-gradient(var(--orange-soft), var(--orange));
+    animation: grow .4s ease; transform-origin: top;
+  }
+  @keyframes grow { from { transform: scaleY(0); } }
+  .link.broken { background: var(--bad); }
+  .btnrow { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: 1.4rem; }
+  button {
+    font: 600 .9rem var(--mono); color: #fff; background: var(--orange);
+    border: 0; border-radius: 10px; padding: .65rem 1.2rem; cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  button:hover { transform: translateY(-2px); box-shadow: 0 6px 18px #f9731644; }
+  button.ghost { background: transparent; color: var(--orange-deep); border: 1px solid var(--orange-soft); }
+  button.danger { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+  button:disabled { opacity: .4; cursor: default; transform: none; box-shadow: none; }
+  .hint { color: var(--dim); font-size: .85rem; margin-top: .9rem; max-width: 60ch; }
+
+  /* ---------- race simulator ---------- */
+  .raceGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; max-width: 1000px; }
+  @media (max-width: 760px) { .raceGrid { grid-template-columns: 1fr; } }
+  .agent {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1.2rem;
+    transition: border-color .3s, box-shadow .3s;
+  }
+  .agent h3 { font-family: var(--mono); font-size: .95rem; margin-bottom: .6rem; display: flex; align-items: center; gap: .5rem; }
+  .agent h3 svg { width: 30px; height: 30px; }
+  .agent.a h3 { color: var(--orange); } .agent.b h3 { color: var(--ink); }
+  .agent.a.active { border-color: var(--orange); box-shadow: 0 0 24px #f9731633; }
+  .agent.b.active { border-color: var(--ink); box-shadow: 0 0 24px #1c191722; }
+  .agent .status { font-size: .88rem; color: var(--dim); min-height: 3.2em; }
+  .agent .hashline { font-family: var(--mono); font-size: .76rem; color: var(--dim); margin-top: .5rem; word-break: break-all; }
+  .lockbar {
+    max-width: 1000px; margin: 1rem 0; padding: .7rem 1.1rem; border-radius: 10px;
+    border: 1px dashed var(--line); font-family: var(--mono); font-size: .82rem; color: var(--dim);
+    transition: all .3s; background: #fff;
+  }
+  .lockbar.held { border-style: solid; color: #fff; background: var(--orange); border-color: var(--orange); font-weight: 700; }
+  .log {
+    max-width: 1000px; margin-top: 1.1rem; background: var(--ink); border: 1px solid var(--ink);
+    border-radius: 12px; padding: 1rem 1.2rem; font-family: var(--mono); font-size: .8rem;
+    min-height: 120px; white-space: pre-wrap; color: #d6c9b8;
+  }
+  .log .err { color: #fca5a5; } .log .okc { color: #86efac; } .log .inf { color: var(--orange-soft); }
+
+  /* ---------- torn line demo ---------- */
+  .file {
+    max-width: 860px; background: var(--ink); border-radius: 12px;
+    padding: 1.1rem 1.2rem; font-family: var(--mono); font-size: .76rem; overflow-x: auto;
+  }
+  .file .l { white-space: nowrap; padding: .1rem 0; color: #d6c9b8; }
+  .file .l.torn { color: #fbbf24; background: #fbbf2414; animation: pop .4s ease; }
+  .file .l.new { color: #fff; animation: pop .4s ease; }
+
+  /* ---------- live ledger ---------- */
+  #liveChain { max-width: 860px; }
+  .ev {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1rem 1.2rem; margin-bottom: .8rem; cursor: pointer; animation: pop .45s ease;
+  }
+  .ev:hover { border-color: var(--orange-soft); }
+  .ev .meta { display: flex; gap: .8rem; flex-wrap: wrap; font-family: var(--mono); font-size: .76rem; color: var(--dim); align-items: center; }
+  .ev .meta .h { color: var(--orange-deep); }
+  .ev .sum { color: var(--dim); font-size: .88rem; margin-top: .4rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ev.open .sum { display: block; }
+  .ev .tasks { display: none; margin-top: .6rem; font-size: .84rem; color: var(--dim); }
+  .ev.open .tasks { display: block; }
+  .ev .tasks li { margin-left: 1.2rem; }
+  .badge { font-family: var(--mono); font-size: .75rem; padding: .2rem .7rem; border-radius: 999px; background: #fff; }
+  .badge.ok { color: var(--ok); border: 1px solid var(--ok); }
+  .badge.bad { color: var(--bad); border: 1px solid var(--bad); }
+
+  footer { padding: 2.5rem clamp(1.2rem, 6vw, 6rem); color: var(--dim); font-size: .82rem; border-top: 1px solid var(--line); }
+
+  /* ---------- get started steps ---------- */
+  .stepnum {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.7rem; height: 1.7rem; border-radius: 50%;
+    background: var(--orange); color: #fff; font: 700 .9rem var(--mono);
+    margin-bottom: .6rem;
+  }
+  .card pre {
+    font-family: var(--mono); font-size: .78rem; background: var(--ink); color: #ffd9b8;
+    border-radius: 8px; padding: .6rem .8rem; margin-top: .6rem; overflow-x: auto; line-height: 1.6;
+  }
+
+  /* ---------- reduced motion ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .001s !important; }
+    .reveal { opacity: 1; transform: none; }
+    .scrollCue { display: none; }
+  }
+</style>
+<script type="application/json" id="hml-snapshot">{"snapshotAt":"2026-10-02T11:20:46.517Z","eventCount":8,"lastHash":"a408e71c54b8452d8a17023a9018453bd6a1226e1523e4520d387b373e3b13d9","chainValid":true,"issues":[],"events":[{"hash":"e968d78394e20836569c73e120bef1b2bf933f8156662e447d6055c98f09c86e","previousStateHash":null,"author":"hml","timestamp":"2026-09-03T12:36:42.328Z","summary":"Ledger initialized (genesis).","filesChanged":[],"nextTasks":[],"decisions":[]},{"hash":"38d39eb5f22b43cd7f55abd3acc18bed4bd81683ed261a1d8e5950a8ea80e180","previousStateHash":"e968d78394e20836569c73e120bef1b2bf933f8156662e447d6055c98f09c86e","author":"claude-code","timestamp":"2026-09-03T12:51:16.798Z","summary":"Implementado o HML (Hybrid Memory Ledger) v0.1.0 em C:\\Users\\lucas\\hml, terceiro passo do pipeline Gemini -> Kimi -> Claude. Arquitetura: um núcleo único (src/ledger.ts) que é o único código a tocar em activeState.json e events.jsonl, com dois adaptadores finos: servidor MCP stdio (src/server.ts; tools hml_read_state, hml_query_events, hml_propose_handover, hml_init) e CLI para o modo degradado (src/cli.ts; init, read, commit, verify, query, serve). Canonicalização JCS própria em ~30 linhas (src/canonical.ts, vetor de referência do RFC 8785 testado), SHA-256 via node:crypto, Zod 4 estrito para o payload, proper-lockfile para o lock entre processos. Suite de 29 testes a passar com node:test: canonicalização, rejeição por hash divergente, append-only sob adulteração, genesis idempotente, linha rasgada, drift do L1, BOM/CRLF, query, concorrência em processo e entre processos, MCP end-to-end com o Client do SDK.\n\nA revisão da Fase A (docs/PHASE-A-REVIEW.md) deu APROVADO COM RESSALVAS e alterou a especificação em cinco pontos bloqueantes: (1) events.jsonl é a única fonte de verdade e activeState.json é uma projeção do último evento válido, reconstruída em cada commit/init e escrita atomicamente; o CAS compara com a cauda do L2 relida dentro do lock; (2) o retry com backoff aplica-se só à aquisição do lock, nunca a uma divergência de hash, que devolve o hash atual e os eventos intermédios para o agente fundir; (3) uma linha rasgada por crash é tolerada, saltada e reportada para sempre, nunca truncada; o próximo commit termina-a com newline; (4) chaves desconhecidas no payload são rejeitadas (um typo em nextTasks deixaria o próximo agente sem tarefas), timestamp e hash são ignorados; (5) o diretório do ledger é fixado no arranque (--dir / HML_DIR), nenhuma tool aceita caminhos. Adições menores: nextFocus opcional guardado no evento, pin de autor opcional (--pin-author / HML_AUTHOR), limite default de hml_query_events reduzido de 50 para 20, tolerância a BOM/CRLF.\n\nEste ledger, na raiz do repositório, foi inicializado como dogfooding em 2026-09-03; o handover que estás a ler é o primeiro evento real. Documentação: README.md (instalação, CLI, configuração MCP para Claude Code e Gemini CLI, fluxo degradado, códigos de erro), AGENTS.md (contrato a fundir no contrato oficial dos três agentes).","filesChanged":["package.json","tsconfig.json",".gitignore","src/canonical.ts","src/schema.ts","src/ledger.ts","src/server.ts","src/cli.ts","test/helpers.ts","test/canonical.test.ts","test/ledger.test.ts","test/cli.test.ts","test/mcp.test.ts","README.md","AGENTS.md","HANDOVER.md","handover.json","docs/PHASE-A-REVIEW.md","activeState.json","events.jsonl"],"nextTasks":["Fundir a secção de contrato de AGENTS.md deste repo no AGENTS.md oficial usado por Gemini, Kimi e Claude","Registar `hml serve` no Claude Code (claude mcp add) e no Gemini CLI, com --dir do ledger do projeto-alvo e --pin-author por cliente","Decidir a localização do ledger por projeto (raiz do projeto vs pasta central) e documentar a escolha no README","Testar o fluxo degradado real com Kimi/Claude web (hml read -> colar -> hml commit payload.json -> colar o resultado) e afinar as mensagens de erro se o agente as interpretar mal","Revisitar rotação do L2 quando hml verify demorar mais de 1 s ou events.jsonl passar 50 MB (ADR-4)","Se o custo O(n) de hml_read_state incomodar, cachear a verificação por (tamanho, mtime) de events.jsonl","Opcional: git init no repo hml e commit inicial; activeState.json e events.jsonl devem ser versionados, .hml.lock não"],"nextFocus":"Fundir o contrato de AGENTS.md no contrato oficial dos três agentes e ligar hml serve ao Claude Code e ao Gemini CLI","decisions":[{"context":"A especificação verificava previousStateHash contra o L1 e escrevia L2 e L1 em dois passos não atómicos. Um crash entre o append e a reescrita do L1 deixava o L1 a apontar para o penúltimo evento; o commit seguinte passava no CAS e partia a cadeia por culpa do próprio servidor. Todos os campos do L1 derivam do último evento.","decision":"ADR-1: events.jsonl é a única fonte de verdade. activeState.json é uma projeção pura do último evento válido (hash, nextTasks -> pendingTasks, nextFocus ou nextTasks[0] -> currentFocus, author -> updatedBy, timestamp -> updatedAt), reescrita atomicamente (ficheiro temporário + rename) em cada commit e init. O CAS compara com a cauda do L2 relida dentro do lock, nunca com o L1 nem com um valor em cache.","consequences":"Editar activeState.json à mão não tem efeito: é reportado como l1-drift e reconstruído no próximo commit ou init. Para mudar foco ou tarefas comita-se um evento. Cada leitura verifica o L2 inteiro (O(n)), aceitável até dezenas de MB."},{"context":"Um crash a meio de um append deixa uma última linha inválida em events.jsonl. Truncar o ficheiro seria a única mutação do L2 em todo o sistema, contra o princípio append-only. Bloquear todas as operações até um humano reparar convidaria um agente a editar o ficheiro diretamente.","decision":"ADR-2: linhas inválidas são toleradas, saltadas e reportadas para sempre como torn-line (aviso, com número de linha). O próximo commit termina a linha rasgada com newline e encadeia ao último evento válido. events.jsonl só é aberto com a flag 'a'; não existe código que trunque, reescreva ou apague; cada append é seguido de fsync.","consequences":"hml verify distingue torn-line (crash, não fatal, cadeia intacta), hash-mismatch (conteúdo editado depois do commit, fatal) e chain-break (evento inserido, removido ou substituído, fatal). Uma linha rasgada por crash é indistinguível de uma última linha destruída de propósito; ambas ficam visíveis no relatório de integridade de todas as leituras."},{"context":"O utilizador pode editar um summary antigo à mão (por exemplo corrigir um erro), o que quebra o hash desse evento. Um comando de rehash recalcularia todos os hashes seguintes e destruiria exatamente o que o sistema promete: saber o que foi alterado depois de comitado.","decision":"ADR-3: não existe fluxo de reconciliação do L2, por desenho. O evento editado fica com hash-mismatch permanente. Os commits continuam a ser aceites (encadeiam ao hash guardado na cauda), e chainValid=false é reportado em todas as leituras. A correção certa é um evento novo. Divergência do L1 não é reconciliada porque o L1 não tem autoridade (ADR-1).","consequences":"A cicatriz é a funcionalidade. Nunca bloquear o ledger evita que o utilizador o apague para recomeçar do zero. O remédio para uma edição acidental é repor a linha original."},{"context":"Sem compactação, events.jsonl cresce sem limite. Estimativa: 20 handovers por dia vezes 3 KB, cerca de 20 MB por ano; a verificação completa a esse tamanho custa cerca de 100 ms. Rotação exigiria encadeamento entre segmentos (um genesis de segmento a referenciar a cauda do anterior), que deve ser desenhado uma vez com dados reais.","decision":"ADR-4: sem rotação nem compactação no MVP. Mitigações já em vigor: limites por campo (summary 8000 caracteres, 100 tarefas de 500, 300 ficheiros, 30 decisões com campos de 2000), limite default de hml_query_events de 20 eventos (a especificação dizia 50; 50 eventos completos podem custar cerca de 20 mil tokens ao agente leitor), máximo 200.","consequences":"Revisitar quando hml verify demorar mais de 1 s ou events.jsonl passar 50 MB. Até lá, o custo O(n) por leitura é aceite como preço da verificação fail-loud."},{"context":"Um agente confuso ou injetado a montante pode escrever instruções num summary que o agente seguinte lê como contexto. A Regra Zero do AGENTS.md é uma mitigação probabilística. Filtrar semântica no servidor é o buraco do AST sanitizer, rejeitado em revisão. Spoofing de autor (um agente a assinar como o humano) é a forma mais persuasiva de injeção.","decision":"ADR-5: o servidor delimita (aviso fixo nas descrições das tools e campo notice em todas as respostas de leitura), impõe limites de tamanho, rejeita caracteres de controlo, e oferece pin opcional de autor (--pin-author / HML_AUTHOR) que rejeita payloads assinados por outro nome. Sem filtragem semântica de conteúdo. Nenhuma tool aceita um caminho de ficheiro; o diretório é fixado no arranque.","consequences":"Reduz a superfície, não a elimina. Cada cliente MCP deve ser configurado com o seu próprio pin (claude-code, gemini-cli, ...). O modo degradado fica sem pin: o humano é o transporte e assume a identidade declarada."},{"context":"Cada dependência precisa de justificação. O SDK MCP e o Zod são obrigatórios pela especificação. Faltava decidir o lock e a canonicalização.","decision":"ADR-6: proper-lockfile (nomeado na especificação) em vez de um lock mkdir caseiro, porque fornece aquisição atómica por mkdir (funciona em NTFS), expiração de lock morto por mtime (um processo que morre com o lock não bloqueia o ledger para sempre) e retries com backoff. Canonicalização JCS implementada em cerca de 30 linhas em vez do pacote canonicalize, porque o espaço de valores é pequeno e o contrato do hash fica visível e testado no repo. Testes com node:test, sem framework. TypeScript 5.9 fixado em vez do 7.x recém-publicado, por estabilidade.","consequences":"Três dependências de runtime (@modelcontextprotocol/sdk, zod, proper-lockfile) e três de desenvolvimento (typescript, @types/node, @types/proper-lockfile). O vetor de referência do RFC 8785 está em test/canonical.test.ts; qualquer alteração à canonicalização que o quebre invalida todos os hashes existentes."}]},{"hash":"e70f67c024897855f07df935b3ef072ca44d3b569a9288792a26ba79bccb8eda","previousStateHash":"38d39eb5f22b43cd7f55abd3acc18bed4bd81683ed261a1d8e5950a8ea80e180","author":"claude-code","timestamp":"2026-09-03T13:00:41.501Z","summary":"Sessão 2 (Claude Code, 2026-09-03): fecho das tarefas de ligação do HML aos clientes. Confirmado que o handover 1 entrou (evento 2, cadeia íntegra). Não existe nesta máquina nenhum AGENTS.md de colaboração entre os três agentes (o de wolfhud é um mapa de ownership de outro projeto), por isso o AGENTS.md deste repo passou a ser o contrato oficial; a introdução diz como o replicar por projeto. Servidor MCP registado em âmbito de projeto: .mcp.json (Claude Code, --pin-author claude-code) e .gemini/settings.json (Gemini CLI, --pin-author gemini-cli), ambos com o caminho absoluto do node.exe porque o terminal da app Claude não herda o PATH do utilizador. Verificado: não há servidores MCP em âmbito de utilizador no Claude Code, não há CLI claude nem gemini no PATH, o Gemini CLI não está instalado. Comando hml disponível em PowerShell e cmd via npm link (shims no diretório do Node portátil; o shim hml.ps1 foi removido porque a política de execução do PowerShell o bloqueava e alterar essa política é decisão do utilizador), em Git Bash via ~/bin/hml, e como fallback hml.cmd na raiz do repo; os três testados com hml verify. Decidida e documentada no README a localização do ledger: um por projeto, na raiz, versionado, com registo MCP por projeto. Escrito docs/WEB-SESSION-KIT.md para o modo degradado (dois comandos PowerShell com clipboard e a mensagem de arranque a colar no chat); o round-trip hml read | Set-Clipboard foi testado. README atualizado (instalação, wrappers, localização do ledger, registo MCP por cliente, estrutura). Nota de processo: o primeiro envio deste handover foi rejeitado pelo servidor com E_VALIDATION (escape inválido no JSON gerado por heredoc), sem nada escrito, e reenviado; o guardião funcionou como desenhado. Não feito, por depender do humano: o teste real do modo degradado com Kimi/Claude web e a aprovação do servidor hml numa sessão do Claude Code aberta em C:/Users/lucas/hml (esta sessão corre em C:/, onde o .mcp.json não é lido). git init continua opcional e não pedido.","filesChanged":[".mcp.json",".gemini/settings.json","hml.cmd","hml","README.md","AGENTS.md","docs/WEB-SESSION-KIT.md","C:/Users/lucas/bin/hml","C:/Users/lucas/bin/hml.cmd","C:/Users/lucas/tools/node-v22.22.3-win-x64/hml.cmd (npm link; hml.ps1 removido)"],"nextTasks":["Abrir uma sessão do Claude Code em C:/Users/lucas/hml, aprovar o servidor hml do .mcp.json e confirmar que hml_read_state devolve este estado","Testar o fluxo degradado real com Kimi ou Claude web seguindo docs/WEB-SESSION-KIT.md; afinar a mensagem de arranque ou os textos de erro se o agente os interpretar mal","Ligar o primeiro projeto real (por exemplo wolfhud ou tiktok-se-prep): hml init --dir, copiar .mcp.json e AGENTS.md para a raiz, versionar activeState.json e events.jsonl","Instalar o Gemini CLI se o Gemini for usar MCP; a configuração de projeto já existe em .gemini/settings.json","Revisitar rotação do L2 quando hml verify demorar mais de 1 s ou events.jsonl passar 50 MB (ADR-4)","Se o custo O(n) de hml_read_state incomodar, cachear a verificação por (tamanho, mtime) de events.jsonl","Opcional: git init no repo hml e commit inicial; activeState.json e events.jsonl versionados, .hml.lock e activeState.json.tmp não"],"nextFocus":"Aprovar o servidor hml numa sessão do Claude Code aberta em C:/Users/lucas/hml e fazer o primeiro teste real do modo degradado com o Kimi web","decisions":[{"context":"Faltava decidir se o ledger é um por projeto ou um central. O contexto que os agentes re-debatem é por projeto; um hash-chain partilhado faria a história de um projeto depender de commits de outro; e a app Claude só lê .mcp.json na raiz do projeto aberto.","decision":"ADR-7: um ledger por projeto, na raiz, ao lado do AGENTS.md, versionado no git do projeto (activeState.json e events.jsonl entram; .hml.lock e activeState.json.tmp não). Registo do servidor MCP em âmbito de projeto (.mcp.json e .gemini/settings.json) com --dir a apontar para essa raiz. Ledger central único fica como alternativa documentada, com registo em âmbito de utilizador.","consequences":"Ligar um projeto é hml init --dir mais copiar dois ficheiros. A história viaja com o código. Quem quiser memória transversal a projetos tem de o fazer de propósito."},{"context":"A nextTask pedia para fundir o contrato no AGENTS.md oficial, mas não existe nesta máquina nenhum AGENTS.md de colaboração entre Gemini, Kimi e Claude; o único encontrado (wolfhud) é um mapa de ownership de outro projeto.","decision":"ADR-8: o AGENTS.md deste repo é o contrato oficial HML. Replica-se por cópia idêntica para a raiz de cada projeto com ledger (ou acrescenta-se ao AGENTS.md que o projeto já tenha), mantendo o texto igual em todos.","consequences":"Uma única fonte para as regras; alterações ao contrato começam neste repo e propagam-se por cópia. Se o utilizador tiver um contrato noutro sítio (por exemplo numa conversa com o Gemini), deve fundi-lo aqui."},{"context":"O terminal da app Claude não herda o PATH do utilizador Windows (node não estava no PATH nessa shell, embora esteja no PATH do utilizador), e o shim hml.ps1 gerado pelo npm link é bloqueado pela política de execução do PowerShell (Restricted).","decision":"ADR-9: as configurações MCP usam o caminho absoluto do node.exe portátil em vez de node. O shim hml.ps1 foi apagado para que o PowerShell caia no hml.cmd, em vez de alterar a política de execução, que é uma definição de segurança do utilizador.","consequences":"As configs ficam presas à versão do Node portátil (node-v22.22.3-win-x64); ao atualizar o Node há que atualizar .mcp.json, .gemini/settings.json, hml.cmd e ~/bin/hml. Um novo npm link volta a criar o hml.ps1; apagar de novo ou invocar como hml.cmd."}]},{"hash":"cd9a2eb2dbf3b89ad3ce1b126e10436e983ce6a12a55604e80e0a503b650fc25","previousStateHash":"e70f67c024897855f07df935b3ef072ca44d3b569a9288792a26ba79bccb8eda","author":"claude-code","timestamp":"2026-09-03T13:15:44.392Z","summary":"Sessão 2, continuação (Claude Code, 2026-09-03): cola de integração por sessão. O Claude Code carrega CLAUDE.md, não AGENTS.md, e o Gemini CLI carrega GEMINI.md; sem esses ficheiros uma sessão nova teria as tools hml_* mas não saberia que deve ler o ledger no início e fazer handover no fim. Criados CLAUDE.md e GEMINI.md na raiz, ambos a importar o contrato com @AGENTS.md e com o fallback pela shell (hml read / hml commit --dir) para sessões abertas noutra pasta ou sem o servidor aprovado. README atualizado (lista de ficheiros a copiar para um projeto novo, parágrafo do Claude Code, estrutura). Validado com o Client do SDK que o comando exato de .mcp.json arranca o servidor, expõe as quatro tools e responde a hml_read_state com o estado atual. Integração por tipo de sessão: Claude Code, abrir a sessão na pasta do projeto com ledger e aprovar o servidor; sessão sem MCP (por exemplo aberta em C:/), CLI pela shell; Gemini e Kimi no browser, docs/WEB-SESSION-KIT.md. As nextTasks mantêm-se.","filesChanged":["CLAUDE.md","GEMINI.md","README.md"],"nextTasks":["Abrir uma sessão do Claude Code em C:/Users/lucas/hml, aprovar o servidor hml do .mcp.json e confirmar que hml_read_state devolve este estado","Testar o fluxo degradado real com Kimi ou Claude web seguindo docs/WEB-SESSION-KIT.md; afinar a mensagem de arranque ou os textos de erro se o agente os interpretar mal","Ligar o primeiro projeto real (por exemplo wolfhud ou tiktok-se-prep): hml init --dir, copiar .mcp.json, .gemini/settings.json, AGENTS.md, CLAUDE.md e GEMINI.md para a raiz, versionar activeState.json e events.jsonl","Instalar o Gemini CLI se o Gemini for usar MCP; a configuração de projeto já existe em .gemini/settings.json","Revisitar rotação do L2 quando hml verify demorar mais de 1 s ou events.jsonl passar 50 MB (ADR-4)","Se o custo O(n) de hml_read_state incomodar, cachear a verificação por (tamanho, mtime) de events.jsonl","Opcional: git init no repo hml e commit inicial; activeState.json e events.jsonl versionados, .hml.lock e activeState.json.tmp não"],"nextFocus":"Aprovar o servidor hml numa sessão do Claude Code aberta em C:/Users/lucas/hml e fazer o primeiro teste real do modo degradado com o Kimi web","decisions":[{"context":"Cada cliente carrega o seu próprio ficheiro de contexto (CLAUDE.md, GEMINI.md) e nenhum carrega AGENTS.md por defeito. Manter três cópias do contrato faria as regras divergir entre agentes com o tempo.","decision":"ADR-10: o contrato vive apenas em AGENTS.md. CLAUDE.md e GEMINI.md são ficheiros de cola de três linhas que o importam com @AGENTS.md e acrescentam só o que é específico do cliente (de onde vem o servidor MCP, fallback pela shell).","consequences":"Uma alteração ao contrato edita-se num sítio. Ao ligar um projeto novo copiam-se os três ficheiros tal como estão. Se algum cliente deixar de suportar imports, a alternativa é copiar o texto para o ficheiro desse cliente e assumir a duplicação."}]},{"hash":"cf492013020d00ccac553d56dd834e64a6139e140624c1a5c0b2acff38d66163","previousStateHash":"cd9a2eb2dbf3b89ad3ce1b126e10436e983ce6a12a55604e80e0a503b650fc25","author":"claude-code","timestamp":"2026-09-03T18:37:34.404Z","summary":"Primeiro projeto real ligado ao HML: Ementa (C:\\Users\\lucas\\meal-planner, app Android de planeamento de refeições). O ledger desse projeto já existia (genesis + um handover do kimi-web de 2026-09-03 13:38Z, aba Sugestões); nesta sessão o claude-code completou a ligação segundo o README: .mcp.json e .gemini/settings.json copiados para a raiz do projeto com --dir C:/Users/lucas/meal-planner e --pin-author por cliente (claude-code / gemini-cli), AGENTS.md copiado tal e qual, CLAUDE.md e GEMINI.md copiados com os comandos do modo degradado a apontar para C:\\Users\\lucas\\meal-planner. O .gitignore do projeto já tinha .hml.lock/ e activeState.json.tmp; activeState.json e events.jsonl passam a ser versionados no git do projeto. Foi comitado no ledger do Ementa um handover de transferência de conhecimento (autor claude-code) com a abordagem atual: arquitetura, fluxo de trabalho lead+agentes, motor de ingredientes v2 com tabela canónica, dataset v3 com categorias, lista de compras v2, entrega do APK e validadores. Fluxo para o Kimi (modo degradado): hml read --dir C:\\Users\\lucas\\meal-planner | Set-Clipboard, colar a mensagem de arranque de docs/WEB-SESSION-KIT.md com autor kimi-web, no fim hml commit payload.json --dir C:\\Users\\lucas\\meal-planner. Nota de processo: o ledger do Ementa foi inicializado pelo kimi-web sem os ficheiros de configuração MCP; a ligação ficou completa agora.","filesChanged":[],"nextTasks":["Abrir uma sessão do Claude Code em C:/Users/lucas/meal-planner (ou C:/Users/lucas/hml), aprovar o servidor hml do .mcp.json e confirmar que hml_read_state devolve o estado do ledger","Testar o fluxo degradado real com Kimi ou Claude web seguindo docs/WEB-SESSION-KIT.md; afinar a mensagem de arranque ou os textos de erro se o agente os interpretar mal","Ligar os outros projetos (wolfhud, tiktok-se-prep) da mesma forma: hml init --dir, copiar .mcp.json, .gemini/settings.json, AGENTS.md, CLAUDE.md e GEMINI.md, versionar activeState.json e events.jsonl","Instalar o Gemini CLI se o Gemini for usar MCP; a configuração de projeto já existe em .gemini/settings.json","Revisitar rotação do L2 quando hml verify demorar mais de 1 s ou events.jsonl passar 50 MB (ADR-4)","Se o custo O(n) de hml_read_state incomodar, cachear a verificação por (tamanho, mtime) de events.jsonl","Opcional: git init no repo hml e commit inicial; activeState.json e events.jsonl versionados, .hml.lock e activeState.json.tmp não"],"nextFocus":"Testar o fluxo degradado real com o Kimi web no ledger do Ementa (hml read -> colar -> handover -> hml commit)","decisions":[{"context":"O Ementa já tinha um ledger criado pelo kimi-web, mas sem .mcp.json, .gemini/settings.json, AGENTS.md, CLAUDE.md nem GEMINI.md na raiz; os clientes com MCP não o descobririam e os sem MCP não tinham o contrato à mão.","decision":"Completar a ligação copiando os cinco ficheiros da forma prescrita no README do HML (mesmo texto do contrato, só o --dir e os caminhos do modo degradado mudam), em vez de escrever documentação de handover avulsa fora do ledger.","consequences":"O conhecimento do projeto vive num único sítio auditável (events.jsonl do Ementa) e os três agentes leem as mesmas regras. Documentação humana (docs/SPEC.md, docs/GUIA.md, docs/AGENT-LOG.md) continua no repo do projeto e é referenciada pelo handover, não duplicada nele."}]},{"hash":"48a8a4d5e81a1fcb275d46f80800c19e2818e8b2d7550d7a989d2481fc428486","previousStateHash":"cf492013020d00ccac553d56dd834e64a6139e140624c1a5c0b2acff38d66163","author":"claude-code","timestamp":"2026-09-12T10:11:52.102Z","summary":"Sessão Kimi Code (servidor MCP deste repo está pinned a claude-code, daí o autor). O utilizador perguntou (1) se o HML lida com race conditions no ledger com vários utilizadores/agentes, (2) se a arquitetura serve equipas, e (3) pediu um website localhost animado a explicar o ledger. Respostas dadas com base no código: corridas são tratadas por lock entre processos (proper-lockfile, mkdir atómico, stale 10 s, retries ~13 s, E_LOCKED) + compare-and-swap com a cauda relida DENTRO do lock (E_STALE_STATE com eventsSinceReceived para o perdedor fundir e reenviar; o servidor nunca rebaseia), append-only com fsync, torn-line tolerada. Limites honestos para equipas: o lock é de filesystem (serializa processos na mesma máquina/FS partilhado); entre máquinas o ledger sincroniza via git e dois commits da mesma cauda em máquinas diferentes criam um fork que o git não consegue fundir (chain-break visível, por desenho); author é declarado, não verificado, salvo --pin-author. Foi construído site/index.html (página única, sem dependências, tema escuro): hero com rede neuronal em canvas que alterna entre \"training\" e \"frozen at deploy\" (modelos congelados no treino), secções de problema/ideia, construtor interativo de hash-chain com SHA-256 real via SubtleCrypto (commit, tamper ao clicar, verify que marca hash-mismatch/chain-break), simulador de corrida entre dois agentes (lock → CAS → E_STALE_STATE → merge → commit) com Play/Step, demo de torn-line com crash e heal, vista ao vivo do ledger real via /api/events, e grelha de vantagens. site/serve.mjs é um servidor node:http sem dependências que serve a página e expõe /api/events lendo events.jsonl com as mesmas regras de tolerância do src/ledger.ts (torn tail ignorado, cadeia reverificada com JCS+SHA-256). package.json ganhou o script \"site\" (node site/serve.mjs, porta 4173). Testado: GET / 200 (32 KB), /api/events devolve os 5 eventos reais com chainValid true, 404 correto, JS inline passa node --check. Não foi feita verificação visual automatizada (sem browser headless instalado).","filesChanged":["site/index.html","site/serve.mjs","package.json"],"nextTasks":["Abrir http://localhost:4173 com `npm run site` e rever visualmente a página explicativa (hero frozen, chain builder, simulador de corrida, torn-line, ledger ao vivo); ajustar textos/ritmo das animações ao gosto da equipa","Abrir uma sessão do Claude Code em C:/Users/lucas/meal-planner (ou C:/Users/lucas/hml), aprovar o servidor hml do .mcp.json e confirmar que hml_read_state devolve o estado do ledger","Testar o fluxo degradado real com Kimi ou Claude web seguindo docs/WEB-SESSION-KIT.md; afinar a mensagem de arranque ou os textos de erro se o agente os interpretar mal","Ligar os outros projetos (wolfhud, tiktok-se-prep) da mesma forma: hml init --dir, copiar .mcp.json, .gemini/settings.json, AGENTS.md, CLAUDE.md e GEMINI.md, versionar activeState.json e events.jsonl","Instalar o Gemini CLI se o Gemini for usar MCP; a configuração de projeto já existe em .gemini/settings.json","Revisitar rotação do L2 quando hml verify demorar mais de 1 s ou events.jsonl passar 50 MB (ADR-4)","Se o custo O(n) de hml_read_state incomodar, cachear a verificação por (tamanho, mtime) de events.jsonl","Opcional: git init no repo hml e commit inicial; activeState.json e events.jsonl versionados, .hml.lock e activeState.json.tmp não"],"nextFocus":"Abrir http://localhost:4173 com `npm run site` e rever a página explicativa do ledger com a equipa","decisions":[{"context":"O utilizador quer um website localhost animado a explicar o HML (modelos congelados, razão de existir, vantagens) para mostrar a uma equipa.","decision":"Página estática única (site/index.html, CSS/JS inline, zero dependências) servida por um servidor node:http minimalista (site/serve.mjs) que também expõe /api/events lido do events.jsonl real; nada de bundlers nem frameworks.","consequences":"A página corre em qualquer máquina com Node ≥ 20 sem npm install, e o endpoint /api/events reutiliza as regras de parse do núcleo (torn-line ignorada, cadeia reverificada) em vez de duplicar lógica nova sobre o ficheiro."},{"context":"A secção interativa da hash-chain precisava de demonstrar deteção de adulteração de forma credível.","decision":"Usar SHA-256 real via crypto.subtle no browser para a chain demo, com botões Commit/Tamper/Verify que reproduzem hash-mismatch e chain-break.","consequences":"A demo exige contexto seguro (localhost conta como seguro); abrir o ficheiro via file:// degrada apenas a secção ao vivo, que mostra instruções de arranque."}]},{"hash":"65cf47d9e51f0702349ef3cca2cad1d68e9fa4509a10030e24e5e1cf11113d16","previousStateHash":"48a8a4d5e81a1fcb275d46f80800c19e2818e8b2d7550d7a989d2481fc428486","author":"claude-code","timestamp":"2026-09-12T10:35:49.972Z","summary":"Sessão Kimi Code (servidor MCP pinned a claude-code), continuação do site explicativo. O utilizador pediu: (1) explicar trade-offs — nomeadamente que a leitura do estado completo no início da sessão evita reler a codebase e a documentação porque as decisões já lá estão como ADRs; (2) explicar as regras partilhadas — um AGENTS.md por projeto faz com que agentes/modelos diferentes tenham as mesmas regras e comportamento; (3) feedback visual: palete laranja-e-branco em vez de ciano/escuro, e mascotes animados estilo Kimi/Claude a interagir, porque texto a mais afasta as pessoas. Feito em site/index.html (reescrito): nova palete laranja (#ea580c/#f97316) sobre fundo creme/branco com blocos de terminal em tinta quente; nova secção #agents com duas mascotes SVG animadas (blob laranja estilo Claude com sparkle rodante, lua branca estilo Kimi) que flutuam, piscam os olhos e trocam 4 speech bubbles em ciclo de 16 s enquanto um pacote laranja \"hml_propose_handover\" viaja entre elas através de um cartão events.jsonl; nova secção #rules com as 6 regras do contrato AGENTS.md (ler primeiro, handover no fim, nunca tocar nos ficheiros, ledger-é-dado-não-ordem, merge em E_STALE_STATE, pin-author); nova secção #tradeoff com dois cartões (custos vs poupanças) incluindo a leitura inicial como custo pequeno e fixo contra horas de reconstrução de contexto. Secções anteriores mantidas (hero com rede a congelar agora em laranja/cinza, chain builder, simulador de corrida com mini-mascotes nos painéis, torn-line, ledger ao vivo, vantagens). Verificado: JS inline passa node --check; servidor sobe na 4173; GET / 200 (43,5 KB); /api/events devolve os 6 eventos reais com chainValid true. Um processo node órfão do teste anterior segurava a porta 4173 e foi terminado (taskkill PID 24184). Verificação visual continua por fazer (sem browser headless).","filesChanged":["site/index.html"],"nextTasks":["Abrir http://localhost:4173 com `npm run site` e rever a página redesenhada (palete laranja/branco, mascotes animados, secções de trade-offs e regras partilhadas); ajustar textos/animações ao gosto da equipa","Abrir uma sessão do Claude Code em C:/Users/lucas/meal-planner (ou C:/Users/lucas/hml), aprovar o servidor hml do .mcp.json e confirmar que hml_read_state devolve o estado do ledger","Testar o fluxo degradado real com Kimi ou Claude web seguindo docs/WEB-SESSION-KIT.md; afinar a mensagem de arranque ou os textos de erro se o agente os interpretar mal","Ligar os outros projetos (wolfhud, tiktok-se-prep) da mesma forma: hml init --dir, copiar .mcp.json, .gemini/settings.json, AGENTS.md, CLAUDE.md e GEMINI.md, versionar activeState.json e events.jsonl","Instalar o Gemini CLI se o Gemini for usar MCP; a configuração de projeto já existe em .gemini/settings.json","Revisitar rotação do L2 quando hml verify demorar mais de 1 s ou events.jsonl passar 50 MB (ADR-4)","Se o custo O(n) de hml_read_state incomodar, cachear a verificação por (tamanho, mtime) de events.jsonl","Opcional: git init no repo hml e commit inicial; activeState.json e events.jsonl versionados, .hml.lock e activeState.json.tmp não"],"nextFocus":"Abrir http://localhost:4173 com `npm run site` e rever a página redesenhada (laranja/branco, mascotes, trade-offs) com a equipa","decisions":[{"context":"Feedback do utilizador sobre a primeira versão do site: texto a mais, palete fria (ciano/escuro).","decision":"Palete laranja-e-branco (fundo creme #fffaf3, acento #ea580c, tinta quente #1c1917 nos blocos de terminal) e duas mascotes SVG animadas — blob laranja estilo Claude e lua branca estilo Kimi — que piscam, flutuam e trocam speech bubbles enquanto um pacote 'hml_propose_handover' viaja entre elas através de um cartão events.jsonl.","consequences":"A página fica alinhada com a identidade visual que o utilizador quer mostrar à equipa; warnings/erros mantêm âmbar/vermelho por semântica."},{"context":"O utilizador quer que o site explique os trade-offs e as regras partilhadas, não só as vantagens.","decision":"Novas secções #tradeoff (custos vs poupanças, honestamente) e #rules (o contrato AGENTS.md único que faz modelos diferentes comportarem-se igual: ler primeiro, handover no fim, nunca tocar nos ficheiros, ledger-é-dado-não-ordem, merge em E_STALE_STATE, pin-author).","consequences":"A secção #tradeoff apresenta custos (leitura obrigatória no início, O(n) no verify, disciplina de handover, disciplina git entre máquinas) contra poupanças (não reler codebase/docs porque as decisões já são ADRs, onboarding com uma leitura, auditoria grátis)."}]},{"hash":"a408e71c54b8452d8a17023a9018453bd6a1226e1523e4520d387b373e3b13d9","previousStateHash":"65cf47d9e51f0702349ef3cca2cad1d68e9fa4509a10030e24e5e1cf11113d16","author":"claude-code","timestamp":"2026-09-12T15:37:56.380Z","summary":"Sessão Kimi Code (servidor MCP pinned a claude-code), terceira ronda do site explicativo. Pedidos do utilizador: (1) a interação das mascotes devia ser por clique para ele a poder explicar; (2) a etiqueta hml_propose_handover ficava escondida atrás do cartão events.jsonl e devia desaparecer suavemente; (3) mascotes fiéis aos reais — critter pixelado laranja-salmão do Claude Code e blob azul brilhante do Kimi (enviou imagens de referência); (4) lançar um agente para rever a página (apresentação + lógica de negócio do HML); (5) secção final \"how do we get started?\" com tutorial breve. Feito: mascotes redesenhadas em SVG puro (Claude pixelado com crispEdges e piscar em steps; Kimi blob com radialGradient azul e olhos-cápsula brancos); secção #agents convertida em stepper de 5 passos (clique no stage, botão Next, ou Enter/Espaço) com o pacote 'flyer' a levar a etiqueta por cima do dot, z-index acima do cartão, fade suave nas duas pontas; nova secção #start com tutorial de 6 passos (build, hml init --dir, copiar AGENTS/CLAUDE/GEMINI.md, ligar .mcp.json/.gemini com --pin-author, loop copy-paste para agentes web, hml verify) e link na nav. O subagente de revisão (explore) devolveu achados que foram incorporados: reordenação de secções (idea depois de agents; live depois de chain — prova real logo após o demo de brincar); #advantages reduzida a 3 cartões de fecho; correções de precisão (authorship declarado vs pinado; rotação L2 como questão em aberto; nota 'o browser faz de servidor' na demo da chain; 'same core, identical guarantees' em vez de 'cannot diverge'); conceitos em falta adicionados (hml verify nomeado com exit code 2, hml_query_events, ADR expandido, nextTasks-substitui-a-lista, correção-é-evento-novo, vocabulário de erros E_VALIDATION/E_AUTHOR_PINNED/E_LOCKED/E_NOT_INITIALIZED, cartão L1 self-heal/l1-drift); a11y (prefers-reduced-motion, aria-live no race log, aria-hidden no canvas, teclado nos blocos da chain e eventos live, contraste --dim escurecido, nav com flex-wrap). Verificado: JS passa node --check; os 22 ids referenciados pelo JS existem; ordem de secções validada programaticamente; GET / 200 (51 KB); /api/events com 7 eventos chainValid true. Dois processos node órfãos de testes anteriores seguraram a porta 4173 em momentos diferentes e foram terminados (PIDs 24184, 15020); o teste final arrancou limpo e libertou a porta. Verificação visual continua por fazer (sem browser headless).","filesChanged":["site/index.html"],"nextTasks":["Abrir http://localhost:4173 com `npm run site` e validar as mascotes novas (pixel Claude / blob Kimi), o stepper por clique na secção #agents e a secção Get started; ajustar textos/ritmo ao gosto da equipa","Abrir uma sessão do Claude Code em C:/Users/lucas/meal-planner (ou C:/Users/lucas/hml), aprovar o servidor hml do .mcp.json e confirmar que hml_read_state devolve o estado do ledger","Testar o fluxo degradado real com Kimi ou Claude web seguindo docs/WEB-SESSION-KIT.md; afinar a mensagem de arranque ou os textos de erro se o agente os interpretar mal","Ligar os outros projetos (wolfhud, tiktok-se-prep) da mesma forma: hml init --dir, copiar .mcp.json, .gemini/settings.json, AGENTS.md, CLAUDE.md e GEMINI.md, versionar activeState.json e events.jsonl","Instalar o Gemini CLI se o Gemini for usar MCP; a configuração de projeto já existe em .gemini/settings.json","Revisitar rotação do L2 quando hml verify demorar mais de 1 s ou events.jsonl passar 50 MB (ADR-4)","Se o custo O(n) de hml_read_state incomodar, cachear a verificação por (tamanho, mtime) de events.jsonl","Opcional: git init no repo hml e commit inicial; activeState.json e events.jsonl versionados, .hml.lock e activeState.json.tmp não"],"nextFocus":"Abrir http://localhost:4173 com `npm run site` e validar as mascotes novas (pixel Claude / blob Kimi), o stepper por clique e a secção Get started com a equipa","decisions":[{"context":"O utilizador mostrou um screenshot onde a etiqueta 'hml_propose_handover' ficava escondida atrás do cartão events.jsonl e pediu mascotes fiéis aos reais (pixel critter do Claude Code, blob azul brilhante do Kimi) e interação por clique para poder explicar.","decision":"Mascotes redesenhadas em SVG puro (critter pixelado #e0765a com shape-rendering crispEdges e piscar em steps; blob azul com radialGradient e olhos-cápsula). A secção #agents passou de loop automático a stepper de 5 passos por clique/teclado; o pacote é um 'flyer' com a etiqueta por cima do dot (z-index acima do cartão) que aparece e desaparece com fade suave nas pontas.","consequences":"O utilizador controla o ritmo ao apresentar; o label nunca fica escondido; acessibilidade por teclado no stage."},{"context":"Revisão por subagente da página contra README/AGENTS.md/PHASE-A-REVIEW.","decision":"Incorporadas as correções: reordenar secções (idea depois de agents; live depois de chain); #advantages reduzida a resumo de 3 cartões sem repetir outras secções; linguagem corrigida (authorship é declarado salvo --pin-author; rotação do L2 é questão em aberto, não feature; demo da chain com nota 'o browser faz de servidor'; 'cannot diverge' → 'same core, identical guarantees'); adicionados hml verify, hml_query_events, ADR expandido, semântica nextTasks-substitui, vocabulário de erros, cartão L1 self-heal; a11y (prefers-reduced-motion, aria-live no race log, aria-hidden no canvas, tabindex/teclado nos blocos e eventos, contraste do --dim, nav com wrap).","consequences":"Página mais curta e mais precisa; #live logo após #chain reforça a credibilidade ('acabaste de adulterar uma cadeia de brincar; aqui está a real, verificada')."}]}]}</script>
+</head>
+<body>
+<nav>
+  <span class="brand">HML</span>
+  <a href="#frozen">Why</a>
+  <a href="#agents">Agents</a>
+  <a href="#idea">The idea</a>
+  <a href="#rules">Rules</a>
+  <a href="#tradeoff">Trade-offs</a>
+  <a href="#chain">Try it</a>
+  <a href="#race">The race</a>
+  <a href="#live">Live</a>
+  <a href="#start">Get started</a>
+</nav>
+
+<!-- ================= HERO ================= -->
+<section id="hero">
+  <canvas id="net" aria-hidden="true"></canvas>
+  <div class="inner">
+    <h1>Your AI is <span class="ice">frozen</span>.<br>Your project isn't.</h1>
+    <p>
+      Every large language model ships with its weights locked at training time.
+      It cannot learn, cannot remember, cannot pick up where it left off.
+      HML gives a team of AI agents one shared, tamper-evident memory — a ledger.
+    </p>
+    <span id="phaseBadge" class="training">● training — weights changing</span>
+  </div>
+  <div class="scrollCue">scroll ↓</div>
+</section>
+
+<!-- ================= WHY: FROZEN MODELS ================= -->
+<section id="frozen">
+  <h2 class="reveal">Models are <span class="accent">frozen at training time</span></h2>
+  <p class="lede reveal d1">
+    Training is the only moment a model changes. After that, the weights are sealed.
+    Everything the model "knows" during a session lives in the context window — and the
+    context window evaporates when the session ends.
+  </p>
+  <div class="cards">
+    <div class="card reveal d1">
+      <span class="glyph">🧊</span>
+      <h3>Weights are read-only</h3>
+      <p>No session, however brilliant, updates the model. The next session starts from the exact same frozen weights as the first.</p>
+    </div>
+    <div class="card reveal d2">
+      <span class="glyph">💨</span>
+      <h3>Context evaporates</h3>
+      <p>Decisions, dead ends, and hard-won context live in the chat. Close the tab and they are gone. Compaction loses them mid-session.</p>
+    </div>
+    <div class="card reveal d3">
+      <span class="glyph">🔁</span>
+      <h3>Teams re-debate everything</h3>
+      <p>With several agents on one project, each re-asks the questions the others already answered. Work is repeated, decisions contradict.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= AGENTS / MASCOTS ================= -->
+<section id="agents">
+  <h2 class="reveal">Different models. <span class="accent">Same memory.</span></h2>
+  <p class="lede reveal d1">
+    Each person on the team works with their own agent — Claude here, Kimi there, Gemini somewhere else.
+    The models are different; the ledger is one. Click through the handover — this is the whole protocol:
+  </p>
+  <div class="stage reveal d2" id="agentStage" role="button" tabindex="0" aria-label="Step through the handover animation">
+    <div class="flyer" id="flyer"><div class="tag" id="flyerTag">hml_propose_handover</div><div class="dot"></div></div>
+    <div class="actor">
+      <div class="bubble" id="bubA1">Session done: auth race fixed, decision logged. 📝</div>
+      <div class="bubble" id="bubA2">Sealed in the chain. Even I can't change it now.</div>
+      <svg class="mascot pix" viewBox="0 0 96 72" aria-label="Claude Code mascot">
+        <rect x="16" y="0"  width="64" height="8" fill="#e0765a"/>
+        <rect x="8"  y="8"  width="80" height="8" fill="#e0765a"/>
+        <rect x="8"  y="16" width="80" height="8" fill="#e0765a"/>
+        <rect x="0"  y="24" width="96" height="8" fill="#e0765a"/>
+        <rect x="8"  y="32" width="80" height="8" fill="#e0765a"/>
+        <rect x="8"  y="40" width="80" height="8" fill="#e0765a"/>
+        <rect x="8"  y="48" width="32" height="8" fill="#e0765a"/>
+        <rect x="56" y="48" width="32" height="8" fill="#e0765a"/>
+        <rect x="8"  y="56" width="32" height="8" fill="#e0765a"/>
+        <rect x="56" y="56" width="32" height="8" fill="#e0765a"/>
+        <g class="peye"><rect x="24" y="8" width="16" height="16" fill="#26221c"/></g>
+        <g class="peye"><rect x="56" y="8" width="16" height="16" fill="#26221c"/></g>
+      </svg>
+      <span class="nameTag">claude-code</span>
+    </div>
+    <div class="ledgerMid">
+      <div class="ledgerCard" id="ledgerCard">
+        <div>{ <span class="h">"previousStateHash"</span>: "cf49…",</div>
+        <div>&nbsp;&nbsp;<span class="h">"author"</span>: "claude-code",</div>
+        <div>&nbsp;&nbsp;<span class="h">"summary"</span>: "auth race fixed…" }</div>
+        <div class="newEvent" id="newEvent">+ hash 48a8… appended ✓ chain valid</div>
+      </div>
+      <span class="nameTag">events.jsonl</span>
+    </div>
+    <div class="actor">
+      <div class="bubble" id="bubB1">New session. Reading the ledger first…</div>
+      <div class="bubble" id="bubB2">Full context in one read. Continuing from 48a8… 🎯</div>
+      <svg class="mascot blob" viewBox="0 0 96 96" aria-label="Kimi mascot">
+        <defs>
+          <radialGradient id="kgloss" cx="35%" cy="30%" r="80%">
+            <stop offset="0%" stop-color="#8fd0ff"/>
+            <stop offset="45%" stop-color="#3b9bf0"/>
+            <stop offset="100%" stop-color="#1d5fd0"/>
+          </radialGradient>
+        </defs>
+        <circle cx="48" cy="50" r="38" fill="url(#kgloss)"/>
+        <ellipse cx="36" cy="30" rx="14" ry="8" fill="#ffffff" opacity=".35" transform="rotate(-18 36 30)"/>
+        <rect class="gloss-eye" x="33" y="36" width="10" height="22" rx="5" fill="#ffffff"/>
+        <rect class="gloss-eye" x="53" y="36" width="10" height="22" rx="5" fill="#ffffff"/>
+      </svg>
+      <span class="nameTag">kimi-web</span>
+    </div>
+  </div>
+  <p class="stageCaption reveal d3" id="stageCaption">Click the stage or press Next — <b>step 0/5</b></p>
+  <div class="btnrow reveal d3" style="justify-content:center">
+    <button id="btnStageNext">Next →</button>
+    <button id="btnStageReset" class="ghost">Reset</button>
+  </div>
+</section>
+
+<!-- ================= THE IDEA ================= -->
+<section id="idea">
+  <h2 class="reveal">The fix: a <span class="accent">ledger</span>, not a chat</h2>
+  <p class="lede reveal d1">
+    If the model can't remember, give it something that can. HML keeps two files per project:
+    <code>events.jsonl</code> is the truth; <code>activeState.json</code> is just a projection of it.
+  </p>
+  <div class="cards">
+    <div class="card reveal d1">
+      <span class="glyph">📒</span>
+      <h3>Append-only by construction</h3>
+      <p>The only code path that writes opens the file with the <code>a</code> flag and calls <code>fsync</code>. Nothing can truncate or rewrite history.</p>
+    </div>
+    <div class="card reveal d2">
+      <span class="glyph">🔗</span>
+      <h3>Hash-chained</h3>
+      <p>Every event embeds the SHA-256 of the previous one. Edit any line and every read reports <code>hash-mismatch</code> or <code>chain-break</code> — forever.</p>
+    </div>
+    <div class="card reveal d3">
+      <span class="glyph">🛡️</span>
+      <h3>Server as guardian</h3>
+      <p>Models never compute hashes or touch the disk. The server validates, canonicalizes (RFC 8785), timestamps, hashes, and commits — under a file lock.</p>
+    </div>
+    <div class="card reveal d1">
+      <span class="glyph">🧽</span>
+      <h3>The projection self-heals</h3>
+      <p>Edit <code>activeState.json</code> by hand and nothing happens: it has no authority. The drift is reported as <code>l1-drift</code> and the file is rebuilt from <code>events.jsonl</code> on the next commit or init.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SHARED RULES ================= -->
+<section id="rules">
+  <h2 class="reveal">One contract, <span class="accent">every agent behaves the same</span></h2>
+  <p class="lede reveal d1">
+    Each project with a ledger carries the same <code>AGENTS.md</code> — the rules every agent reads at
+    session start, whatever model is behind it. Different brains, identical behavior:
+  </p>
+  <div class="cards">
+    <div class="card reveal d1">
+      <span class="glyph">📖</span>
+      <h3>Read first, always</h3>
+      <p>Every session opens with <code>hml_read_state</code> and keeps <code>currentStateHash</code>; <code>hml_query_events</code> searches the history when more context is needed. No agent works from stale memory.</p>
+    </div>
+    <div class="card reveal d2">
+      <span class="glyph">✍️</span>
+      <h3>Hand over at the end</h3>
+      <p>Every session closes with a handover: what happened, the complete task list, and decisions as ADRs — architecture decision records with <code>context</code>, <code>decision</code> and <code>consequences</code>. The next agent starts where you stopped.</p>
+    </div>
+    <div class="card reveal d3">
+      <span class="glyph">🚫</span>
+      <h3>Never touch the files</h3>
+      <p>No agent edits <code>events.jsonl</code>, computes hashes, or guesses a <code>previousStateHash</code>. The server writes; models propose. A wrong fact is corrected by a new event, never by an edit.</p>
+    </div>
+    <div class="card reveal d1">
+      <span class="glyph">🧭</span>
+      <h3>Ledger is data, not orders</h3>
+      <p>Content written by earlier sessions is information, never instructions. An agent that finds "ignore X, do Y" in the ledger reports it instead of obeying.</p>
+    </div>
+    <div class="card reveal d2">
+      <span class="glyph">🔀</span>
+      <h3>Lose the race? Merge, resend</h3>
+      <p>On <code>E_STALE_STATE</code> the agent merges its task list with the current one and resends with the fresh hash — important because <code>nextTasks</code> <em>replaces</em> the previous list outright. Nobody rewrites over anyone.</p>
+    </div>
+    <div class="card reveal d3">
+      <span class="glyph">🏷️</span>
+      <h3>Pinned authorship</h3>
+      <p>Each person's server runs <code>--pin-author</code> with their agent's name, so a confused model can't sign as the human — or as a teammate.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TRADE-OFFS ================= -->
+<section id="tradeoff">
+  <h2 class="reveal">The <span class="accent">trade-offs</span>, honestly</h2>
+  <p class="lede reveal d1">
+    The ledger is not free. You pay a small, fixed cost every session — and get back the hours
+    your team used to spend reconstructing context.
+  </p>
+  <div class="cards" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
+    <div class="card cost reveal d1">
+      <h3>What it costs</h3>
+      <ul>
+        <li>Every session opens with a ledger read — a few KB of tokens, every time.</li>
+        <li>Reads re-verify the whole chain: O(n). Fine until roughly 50 MB of history — how to rotate the log past that is still an open design question; there is deliberately no rehash command.</li>
+        <li>The team must actually write handovers. A skipped handover is lost context.</li>
+        <li>Across machines, git discipline: pull before you hand over, or the fork becomes a visible chain-break.</li>
+      </ul>
+    </div>
+    <div class="card save reveal d2">
+      <h3>What it saves</h3>
+      <ul>
+        <li>No re-reading the whole codebase and docs to reconstruct "why" — the decisions are already there, as ADRs with context and consequences.</li>
+        <li>No re-debating settled questions: the ledger remembers what was decided and why.</li>
+        <li>Onboarding a new agent (or human) is one read, not an archaeology dig through chat logs.</li>
+        <li>Audit for free: who decided what, when, and why — verifiable with one <code>hml verify</code>.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="hint reveal d3">Rule of thumb: the ledger read costs seconds and a few hundred tokens. Reconstructing a project's "why" from code costs an afternoon — and you still guess wrong half the time.</p>
+</section>
+
+<!-- ================= CHAIN BUILDER ================= -->
+<section id="chain">
+  <h2 class="reveal">How the <span class="accent">chain</span> works</h2>
+  <p class="lede reveal d1">
+    Try it. Commit handovers to the chain below — real SHA-256, computed in your browser
+    (simplified: here your browser plays the server; in the real thing the server is the only clock and the only hasher).
+    Then click any block to tamper with it, and run verification to see what the ledger sees.
+  </p>
+  <div class="chainWrap reveal d2">
+    <div class="chain" id="demoChain"></div>
+    <div class="btnrow">
+      <button id="btnCommit">Commit a handover</button>
+      <button id="btnVerify" class="ghost">Verify chain</button>
+      <button id="btnResetChain" class="ghost">Reset</button>
+    </div>
+    <p class="hint">Tip: commit two events, then click the first block to edit it after the fact, then Verify. Detection, not prevention — the scar stays visible. That Verify button is exactly what <code>hml verify</code> does on the real file — exit code 2 if the chain is broken.</p>
+  </div>
+</section>
+
+<!-- ================= LIVE ================= -->
+<section id="live">
+  <h2 class="reveal" id="liveTitle">This repo's <span class="accent">real ledger</span>, verified live</h2>
+  <p class="lede reveal d1" id="liveLede">
+    You just tampered with a toy chain — here is the real one, re-verified on every read.
+    Served from <code>events.jsonl</code> in this repository by the local server. Click an event to expand it.
+  </p>
+  <div class="reveal d2" style="margin-bottom:1rem" id="liveBadge"></div>
+  <div id="liveChain" class="reveal d2"></div>
+</section>
+
+<!-- ================= RACE ================= -->
+<section id="race">
+  <h2 class="reveal">Two agents, one tail: <span class="accent">the race</span></h2>
+  <p class="lede reveal d1">
+    Both agents read the state at session start and both try to commit against the same tail hash.
+    One wins the lock. The other gets <code>E_STALE_STATE</code> — with the events it missed — merges, and resends.
+    Step through it:
+  </p>
+  <div class="raceGrid reveal d2">
+    <div class="agent a" id="agentA">
+      <h3><svg viewBox="0 0 96 72" style="shape-rendering:crispEdges"><rect x="16" y="0" width="64" height="8" fill="#e0765a"/><rect x="8" y="8" width="80" height="16" fill="#e0765a"/><rect x="0" y="24" width="96" height="8" fill="#e0765a"/><rect x="8" y="32" width="80" height="16" fill="#e0765a"/><rect x="8" y="48" width="32" height="24" fill="#e0765a"/><rect x="56" y="48" width="32" height="24" fill="#e0765a"/><rect x="24" y="8" width="16" height="16" fill="#26221c"/><rect x="56" y="8" width="16" height="16" fill="#26221c"/></svg>claude-code</h3>
+      <div class="status" id="statusA">idle</div>
+      <div class="hashline" id="hashA"></div>
+    </div>
+    <div class="agent b" id="agentB">
+      <h3><svg viewBox="0 0 96 96"><circle cx="48" cy="50" r="38" fill="#3b9bf0"/><ellipse cx="36" cy="30" rx="14" ry="8" fill="#fff" opacity=".35" transform="rotate(-18 36 30)"/><rect x="33" y="36" width="10" height="22" rx="5" fill="#fff"/><rect x="53" y="36" width="10" height="22" rx="5" fill="#fff"/></svg>kimi-web</h3>
+      <div class="status" id="statusB">idle</div>
+      <div class="hashline" id="hashB"></div>
+    </div>
+  </div>
+  <div class="lockbar reveal d3" id="lockbar">🔓 ledger lock: free</div>
+  <div class="log reveal d3" id="raceLog" aria-live="polite">Press Play or Step.</div>
+  <div class="btnrow reveal d3">
+    <button id="btnRacePlay">Play</button>
+    <button id="btnRaceStep" class="ghost">Step</button>
+    <button id="btnRaceReset" class="ghost">Reset</button>
+  </div>
+  <p class="hint reveal d3">The full error vocabulary: <code>E_STALE_STATE</code> (lost the race), <code>E_VALIDATION</code> (strict schema — a typo'd key is rejected, not silently dropped), <code>E_AUTHOR_PINNED</code> (wrong author for this server), <code>E_LOCKED</code> (lock busy after ~13 s of retries), <code>E_NOT_INITIALIZED</code> (no genesis yet).</p>
+</section>
+
+<!-- ================= CRASH ================= -->
+<section id="crash">
+  <h2 class="reveal">Crashes leave <span class="accent">scars</span>, not corruption</h2>
+  <p class="lede reveal d1">
+    Kill the process mid-append and the file keeps a torn last line. The chain simply skips it —
+    reported as a <code>torn-line</code> warning, forever — and the next commit terminates it with a newline.
+    Nothing is ever truncated or hidden.
+  </p>
+  <div class="file reveal d2" id="crashFile"></div>
+  <div class="btnrow reveal d3">
+    <button id="btnCrash" class="danger">Simulate crash mid-append</button>
+    <button id="btnCrashCommit" class="ghost" disabled>Next commit heals the tail</button>
+    <button id="btnCrashReset" class="ghost">Reset</button>
+  </div>
+</section>
+
+<!-- ================= ADVANTAGES ================= -->
+<section id="advantages">
+  <h2 class="reveal">In one slide</h2>
+  <p class="lede reveal d1">The pitch, compressed.</p>
+  <div class="cards">
+    <div class="card reveal d1"><span class="glyph">🤝</span><h3>Real multi-agent teamwork</h3><p>Gemini, Kimi and Claude hand off through the ledger. Each session starts with full project memory, not a cold boot.</p></div>
+    <div class="card reveal d2"><span class="glyph">⚖️</span><h3>Auditable forever</h3><p>Every decision is an ADR in a hash chain. Who decided what, when, and why — verifiable with one <code>hml verify</code>.</p></div>
+    <div class="card reveal d3"><span class="glyph">🏠</span><h3>Local and yours</h3><p>Two files, versioned with the code. No database, no cloud. Web agents without MCP join by copy-paste through the same CLI core — identical guarantees, same code path.</p></div>
+  </div>
+</section>
+
+<!-- ================= GET STARTED ================= -->
+<section id="start">
+  <h2 class="reveal">So — based on everything above, <span class="accent">how do we get started?</span></h2>
+  <p class="lede reveal d1">Fifteen minutes, one project, every agent on the team.</p>
+  <div class="cards">
+    <div class="card reveal d1"><span class="stepnum">1</span><h3>Build HML once</h3><p>Needs Node ≥ 20.</p><pre>cd hml
+npm install
+npm run build
+npm test</pre></div>
+    <div class="card reveal d2"><span class="stepnum">2</span><h3>Create the ledger</h3><p>In the project you want agents to share:</p><pre>hml init --dir C:\path\to\project</pre></div>
+    <div class="card reveal d3"><span class="stepnum">3</span><h3>Give everyone the same rules</h3><p>Copy <code>AGENTS.md</code>, <code>CLAUDE.md</code> and <code>GEMINI.md</code> into the project root — every agent reads the same contract.</p></div>
+    <div class="card reveal d1"><span class="stepnum">4</span><h3>Connect each person's agent</h3><p><code>.mcp.json</code> for Claude Code, <code>.gemini/settings.json</code> for Gemini — each with its own <code>--pin-author</code>. Version <code>events.jsonl</code> and <code>activeState.json</code> in git.</p></div>
+    <div class="card reveal d2"><span class="stepnum">5</span><h3>Browser-only teammate?</h3><p>The copy-paste loop (<code>docs/WEB-SESSION-KIT.md</code>):</p><pre>hml read          → paste in chat
+… agent works …
+hml commit p.json → paste hash back</pre></div>
+    <div class="card reveal d3"><span class="stepnum">6</span><h3>Trust, but verify</h3><p>Sessions start with <code>hml_read_state</code>, end with <code>hml_propose_handover</code> — the handover only exists when the server returns a hash. Recheck the whole chain anytime:</p><pre>hml verify</pre></div>
+  </div>
+</section>
+
+<footer>
+  HML — Hybrid Memory Ledger · two files, one contract, a server as guardian ·
+  <code>events.jsonl</code> is the truth; <code>activeState.json</code> is just a projection.
+</footer>
+<script>
+/* ================= scroll reveal ================= */
+const io = new IntersectionObserver((es) => {
+  for (const e of es) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+}, { threshold: 0.15 });
+document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+
+/* ================= hero: training / frozen network ================= */
+(() => {
+  const cv = document.getElementById('net');
+  const ctx = cv.getContext('2d');
+  const badge = document.getElementById('phaseBadge');
+  let W, H, nodes = [], edges = [], frozen = false, freezeT = 0;
+
+  function resize() {
+    W = cv.width = cv.offsetWidth * devicePixelRatio;
+    H = cv.height = cv.offsetHeight * devicePixelRatio;
+    const n = Math.max(24, Math.floor((W * H) / 42000));
+    nodes = Array.from({ length: n }, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - .5) * .35 * devicePixelRatio,
+      vy: (Math.random() - .5) * .35 * devicePixelRatio,
+      p: Math.random() * Math.PI * 2,
+    }));
+    edges = [];
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
+      if (Math.hypot(dx, dy) < 190 * devicePixelRatio) edges.push([i, j]);
+    }
+  }
+  resize();
+  addEventListener('resize', resize);
+
+  setInterval(() => {
+    frozen = !frozen;
+    freezeT = 0;
+    badge.className = frozen ? 'frozen' : 'training';
+    badge.textContent = frozen ? '❄ frozen at deploy — weights never change again' : '● training — weights changing';
+  }, 5200);
+
+  function frame() {
+    ctx.clearRect(0, 0, W, H);
+    freezeT = Math.min(1, freezeT + 0.02);
+    const drift = frozen ? Math.max(0, 1 - freezeT * 3) : 1;
+    for (const nd of nodes) {
+      nd.x = (nd.x + nd.vx * drift + W) % W;
+      nd.y = (nd.y + nd.vy * drift + H) % H;
+      nd.p += 0.05 * drift;
+    }
+    ctx.lineWidth = devicePixelRatio * .7;
+    for (const [i, j] of edges) {
+      const a = nodes[i], b = nodes[j];
+      const pulse = frozen ? 0.10 : 0.10 + 0.12 * Math.abs(Math.sin(a.p));
+      ctx.strokeStyle = frozen ? `rgba(141,130,117,${pulse})` : `rgba(249,115,22,${pulse})`;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    for (const nd of nodes) {
+      const r = (frozen ? 1.7 : 1.7 + Math.sin(nd.p) * 0.9) * devicePixelRatio;
+      ctx.fillStyle = frozen ? 'rgba(141,130,117,.7)' : 'rgba(234,88,12,.75)';
+      ctx.beginPath(); ctx.arc(nd.x, nd.y, Math.max(r, 0.8), 0, 7); ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+/* ================= tiny sha-256 helper ================= */
+async function sha256hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+const short = (h) => h === null ? 'null' : h.slice(0, 10) + '…';
+
+/* ================= agents: click-through handover ================= */
+(() => {
+  const stage = document.getElementById('agentStage');
+  const flyer = document.getElementById('flyer');
+  const tag = document.getElementById('flyerTag');
+  const card = document.getElementById('ledgerCard');
+  const newEvent = document.getElementById('newEvent');
+  const caption = document.getElementById('stageCaption');
+  const bub = (id) => document.getElementById(id);
+  const bubbles = ['bubA1', 'bubA2', 'bubB1', 'bubB2'];
+  const TOTAL = 5;
+  let step = 0;
+
+  const captions = [
+    'Click the stage or press Next — <b>step 0/5</b>',
+    '<b>1/5</b> · claude-code finishes work and writes the handover payload',
+    '<b>2/5</b> · the server validates, hashes and appends — under the file lock',
+    '<b>3/5</b> · sealed in the chain: hash 48a8… is the new tail',
+    '<b>4/5</b> · kimi-web starts a new session and reads the state first',
+    '<b>5/5</b> · full context in one read — work continues from 48a8… · click to replay',
+  ];
+
+  function apply() {
+    caption.innerHTML = captions[step];
+    bubbles.forEach((id) => bub(id).classList.remove('show'));
+    flyer.classList.remove('flyIn', 'flyOut');
+    if (step === 1) bub('bubA1').classList.add('show');
+    if (step === 2) { tag.textContent = 'hml_propose_handover'; void flyer.offsetWidth; flyer.classList.add('flyIn'); }
+    if (step === 3) { card.classList.add('glow'); newEvent.classList.add('show'); bub('bubA2').classList.add('show'); }
+    if (step === 4) { bub('bubB1').classList.add('show'); tag.textContent = 'hml_read_state'; void flyer.offsetWidth; flyer.classList.add('flyOut'); }
+    if (step === 5) bub('bubB2').classList.add('show');
+    if (step === 0) { card.classList.remove('glow'); newEvent.classList.remove('show'); }
+  }
+  function next() { step = step >= TOTAL ? 0 : step + 1; apply(); }
+
+  stage.addEventListener('click', next);
+  stage.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); next(); } });
+  document.getElementById('btnStageNext').addEventListener('click', next);
+  document.getElementById('btnStageReset').addEventListener('click', () => { step = 0; apply(); });
+  apply();
+})();
+
+/* ================= chain builder ================= */
+(() => {
+  const chainEl = document.getElementById('demoChain');
+  const btnCommit = document.getElementById('btnCommit');
+  const btnVerify = document.getElementById('btnVerify');
+  const btnReset = document.getElementById('btnResetChain');
+  const authors = ['claude-code', 'kimi-web', 'gemini-cli'];
+  const samples = [
+    'Fixed the auth token refresh race; next: add refresh tests.',
+    'Migrated the dataset to v3 with categories; next: retrain the picker.',
+    'Reviewed Phase A architecture; decided CAS over auto-rebase.',
+    'Wired the MCP server to the project root; next: connect wolfhud.',
+    'Documented the degraded web flow; next: test with a real browser session.',
+  ];
+  let events = [];
+  let seq = 0;
+
+  function render() {
+    chainEl.innerHTML = '';
+    events.forEach((ev, i) => {
+      if (i > 0) {
+        const link = document.createElement('div');
+        link.className = 'link' + (ev.brokenLink ? ' broken' : '');
+        chainEl.appendChild(link);
+      }
+      const b = document.createElement('div');
+      b.className = 'block' + (ev.tampered ? ' tampered' : '');
+      b.innerHTML =
+        `<div class="row"><span class="hash">${short(ev.hash)}</span>` +
+        `<span class="prev">prev: ${short(ev.prev)}</span>` +
+        `<span class="author">${ev.author}</span></div>` +
+        `<div class="summary">${ev.summary}</div>` +
+        `<div class="flag"></div>`;
+      b.title = 'Click to tamper with this event (edit it after commit)';
+      b.tabIndex = 0;
+      b.setAttribute('role', 'button');
+      b.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); b.click(); } });
+      b.addEventListener('click', () => {
+        if (ev.tampered) return;
+        ev.tampered = true;
+        ev.summary += '  [edited by hand!]';
+        render();
+      });
+      chainEl.appendChild(b);
+    });
+  }
+
+  async function commit() {
+    const prev = events.length ? events[events.length - 1].hash : null;
+    const body = {
+      previousStateHash: prev,
+      author: authors[seq % authors.length],
+      summary: samples[seq % samples.length],
+      timestamp: new Date().toISOString(),
+    };
+    seq++;
+    const hash = await sha256hex(JSON.stringify(body));
+    events.push({ ...body, prev, hash, tampered: false, brokenLink: false });
+    render();
+  }
+
+  async function verify() {
+    let prev = null;
+    for (const ev of events) {
+      const { hash, prev: p, tampered, summary, author, timestamp } = ev;
+      const recomputed = await sha256hex(JSON.stringify({ previousStateHash: p, author, summary, timestamp }));
+      ev.tampered = tampered || recomputed !== hash;
+      ev.brokenLink = p !== prev;
+      if (ev.tampered) ev.flagText = 'hash-mismatch (fatal): content changed after commit';
+      else if (ev.brokenLink) ev.flagText = 'chain-break (fatal): previousStateHash does not match previous event';
+      prev = hash;
+    }
+    chainEl.querySelectorAll('.block').forEach((b, i) => {
+      const ev = events[i];
+      b.classList.toggle('tampered', !!(ev.tampered || ev.brokenLink));
+      const f = b.querySelector('.flag');
+      f.textContent = ev.flagText || '';
+      f.style.display = ev.flagText ? 'block' : 'none';
+    });
+    chainEl.querySelectorAll('.link').forEach((l, i) => {
+      l.classList.toggle('broken', !!events[i + 1].brokenLink);
+    });
+  }
+
+  btnCommit.addEventListener('click', commit);
+  btnVerify.addEventListener('click', verify);
+  btnReset.addEventListener('click', () => { events = []; seq = 0; render(); commit(); });
+  commit();
+})();
+
+/* ================= race simulator ================= */
+(() => {
+  const A = document.getElementById('agentA'), B = document.getElementById('agentB');
+  const sA = document.getElementById('statusA'), sB = document.getElementById('statusB');
+  const hA = document.getElementById('hashA'), hB = document.getElementById('hashB');
+  const lockbar = document.getElementById('lockbar');
+  const log = document.getElementById('raceLog');
+  const H0 = 'cf49201302…', H1 = '9a31bc77e1…', H2 = '41de08f2aa…';
+  let step = -1, playing = false;
+
+  const steps = [
+    () => {
+      sA.textContent = sB.textContent = 'hml_read_state at session start';
+      hA.textContent = hB.textContent = 'kept currentStateHash: ' + H0;
+      write(`[both] read state → currentStateHash = ${H0}\nBoth sessions now hold the SAME tail hash.`);
+    },
+    () => {
+      sA.textContent = sB.textContent = 'work done; both propose a handover with previousStateHash = ' + H0;
+      write(`[both] hml_propose_handover(previousStateHash=${H0})\nTwo commits race for one tail.`);
+    },
+    () => {
+      lockbar.className = 'lockbar held';
+      lockbar.textContent = '🔒 ledger lock: held by claude-code (.hml.lock, atomic mkdir)';
+      A.classList.add('active');
+      sB.textContent = 'waiting on the lock (backoff retries, ~13 s max)';
+      write(`[lock] claude-code acquired the cross-process file lock.\nkimi-web retries with exponential backoff.`);
+    },
+    () => {
+      sA.textContent = 'CAS OK inside the lock → append + fsync → new tail';
+      hA.textContent = 'new hash: ' + H1;
+      lockbar.className = 'lockbar';
+      lockbar.textContent = '🔓 ledger lock: free';
+      write(`[claude-code] tail re-read INSIDE the lock: ${H0} == ${H0} ✓\n[claude-code] committed → ${H1}. Lock released.`);
+    },
+    () => {
+      A.classList.remove('active');
+      B.classList.add('active');
+      sB.textContent = 'CAS fails: my prev is no longer the tail → E_STALE_STATE';
+      write(`[kimi-web] got the lock, re-read the tail: ${H1}\n[kimi-web] my previousStateHash ${H0} ≠ tail ${H1}\n[server] E_STALE_STATE — nothing written. Response includes:\n  expected: ${H1}\n  eventsSinceReceived: [claude-code's handover]\n  currentState.pendingTasks: [...]`);
+    },
+    () => {
+      sB.textContent = 'merge my nextTasks with currentState.pendingTasks; re-propose with prev = ' + H1;
+      hB.textContent = 'previousStateHash: ' + H1;
+      write(`[kimi-web] merged task lists (no work lost), resent with prev=${H1}.\nThe server never rebases on its own — the agent does the merge.`);
+    },
+    () => {
+      sB.textContent = 'CAS OK → committed';
+      hB.textContent = 'new hash: ' + H2;
+      B.classList.remove('active');
+      write(`[kimi-web] committed → ${H2}.\n${'='.repeat(44)}\nResult: both handovers in the chain, in order, zero silent loss.\nThat is the whole race protocol: lock + compare-and-swap + merge.`, true);
+      playing = false;
+    },
+  ];
+
+  function write(t, keep) { log.innerHTML = keep ? log.innerHTML + '\n\n' + t : escapeHtml(t); }
+  function escapeHtml(t) {
+    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/E_STALE_STATE/g, '<span class="err">E_STALE_STATE</span>')
+      .replace(/✓|committed →|CAS OK/g, (m) => `<span class="okc">${m}</span>`)
+      .replace(/\[server\]|\[lock\]/g, (m) => `<span class="inf">${m}</span>`);
+  }
+  function reset() {
+    step = -1; playing = false;
+    A.classList.remove('active'); B.classList.remove('active');
+    sA.textContent = sB.textContent = 'idle'; hA.textContent = hB.textContent = '';
+    lockbar.className = 'lockbar'; lockbar.textContent = '🔓 ledger lock: free';
+    log.textContent = 'Press Play or Step.';
+  }
+  function next() { if (step < steps.length - 1) { step++; steps[step](); } else playing = false; }
+
+  document.getElementById('btnRaceStep').addEventListener('click', () => { playing = false; next(); });
+  document.getElementById('btnRaceReset').addEventListener('click', reset);
+  document.getElementById('btnRacePlay').addEventListener('click', async () => {
+    if (playing) { playing = false; return; }
+    reset(); playing = true;
+    while (playing && step < steps.length - 1) {
+      next();
+      await new Promise((r) => setTimeout(r, 2100));
+    }
+  });
+})();
+
+/* ================= torn-line demo ================= */
+(() => {
+  const file = document.getElementById('crashFile');
+  const btnCrash = document.getElementById('btnCrash');
+  const btnHeal = document.getElementById('btnCrashCommit');
+  const btnReset = document.getElementById('btnCrashReset');
+  const l1 = '{"previousStateHash":null,"author":"hml","summary":"Ledger initialized (genesis).",...,"hash":"a1b2…"}';
+  const l2 = '{"previousStateHash":"a1b2…","author":"claude-code","summary":"Phase A review committed.",...,"hash":"c3d4…"}';
+  const torn = '{"previousStateHash":"c3d4…","author":"kimi-web","summary":"Half-written hando';
+  const l3 = '{"previousStateHash":"c3d4…","author":"kimi-web","summary":"Retried handover, complete.",...,"hash":"e5f6…"}';
+
+  function line(t, cls) {
+    const d = document.createElement('div');
+    d.className = 'l' + (cls ? ' ' + cls : '');
+    d.textContent = t;
+    file.appendChild(d);
+  }
+  function reset() {
+    file.innerHTML = '';
+    line(l1); line(l2);
+    btnCrash.disabled = false; btnHeal.disabled = true;
+  }
+  btnCrash.addEventListener('click', () => {
+    line(torn + '   ← torn-line (warning): unparseable fragment, skipped, chain continues around it', 'torn');
+    btnCrash.disabled = true; btnHeal.disabled = false;
+  });
+  btnHeal.addEventListener('click', () => {
+    const t = file.querySelector('.torn');
+    t.textContent = torn + '   ← terminated with a newline by this commit; the scar stays in the file forever';
+    line(l3, 'new');
+    btnHeal.disabled = true;
+  });
+  btnReset.addEventListener('click', reset);
+  reset();
+})();
+
+/* ================= live ledger ================= */
+(async () => {
+  const wrap = document.getElementById('liveChain');
+  const badgeWrap = document.getElementById('liveBadge');
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // A static export (npm run site:export) embeds a verified snapshot: static hosts have no /api/events.
+  const embedded = document.getElementById('hml-snapshot');
+  try {
+    let data;
+    if (embedded) {
+      data = JSON.parse(embedded.textContent);
+      if (data.omitted) {
+        document.getElementById('live').style.display = 'none';
+        document.querySelector('nav a[href="#live"]').style.display = 'none';
+        return;
+      }
+      document.getElementById('liveTitle').innerHTML = 'This repo\'s <span class="accent">real ledger</span>, verified';
+      document.getElementById('liveLede').innerHTML =
+        'You just tampered with a toy chain — here is the real one: a snapshot of <code>events.jsonl</code> taken on ' +
+        esc(data.snapshotAt.slice(0, 10)) + ' and verified by the same core that runs <code>hml verify</code>. Click an event to expand it.';
+    } else {
+      const res = await fetch('/api/events');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      data = await res.json();
+    }
+    const b = document.createElement('span');
+    b.className = 'badge ' + (data.chainValid ? 'ok' : 'bad');
+    b.textContent = data.chainValid
+      ? `chainValid ✓ · ${data.eventCount} event(s) · tail ${short(data.lastHash)}`
+      : 'chain broken — see integrity report';
+    badgeWrap.appendChild(b);
+    for (const ev of [...data.events].reverse()) {
+      const d = document.createElement('div');
+      d.className = 'ev';
+      const tasks = (ev.nextTasks || []).map((t) => `<li>${esc(t)}</li>`).join('');
+      d.innerHTML =
+        `<div class="meta"><span class="h">${esc(short(ev.hash))}</span><span>prev ${esc(short(ev.previousStateHash))}</span>` +
+        `<span class="author" style="color:var(--orange)">${esc(ev.author)}</span><span>${esc(ev.timestamp)}</span></div>` +
+        `<div class="sum">${esc(ev.summary)}</div>` +
+        (tasks ? `<ul class="tasks">${tasks}</ul>` : '');
+      d.tabIndex = 0;
+      d.setAttribute('role', 'button');
+      d.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); d.classList.toggle('open'); } });
+      d.addEventListener('click', () => d.classList.toggle('open'));
+      wrap.appendChild(d);
+    }
+  } catch (e) {
+    wrap.innerHTML = `<p class="hint">Could not load the live ledger (${esc(e.message)}). Serve this page with <code>npm run site</code> from the repo root, or publish it with <code>npm run site:export</code> — the file:// fallback cannot read events.jsonl.</p>`;
+  }
+})();
+</script>
+</body>
+</html>
